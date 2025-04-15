@@ -97,7 +97,7 @@
     <input type="text" id="device-name" placeholder="Enter Device Name">
     <button onclick="requestAccess()">Request Access</button>
   </div>
-  <div id="reader"></div>
+  <div id="reader" style="display: none;"></div>
   <div id="result">
     <img id="student-img" src="">
     <h2 id="student-name"></h2>
@@ -112,7 +112,7 @@
   <script>
     const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzs-X4sU9JmCw3BieXV4NgP4mLtLqNDYx9x1AxFtuThDl3hMGGTHVxDeAmXdpiuiM1Jwg/exec"; // Replace with your Google Apps Script web app URL
     let qrScanner = null;
-    let localData = {};
+    let localData = null;
     let offlineScans = [];
     let deviceId = localStorage.getItem("deviceId") || generateDeviceId();
     localStorage.setItem("deviceId", deviceId);
@@ -121,13 +121,30 @@
       return "device-" + Math.random().toString(36).substr(2, 9);
     }
 
+    // Preload data to ensure it's available before scanning
+    async function preloadData() {
+      try {
+        const storedData = localStorage.getItem("localData");
+        if (storedData) {
+          localData = JSON.parse(storedData);
+        }
+        const response = await fetch(`${WEB_APP_URL}?method=getData`);
+        localData = await response.json();
+        localStorage.setItem("localData", JSON.stringify(localData));
+      } catch (error) {
+        console.error("Error preloading data:", error);
+        localData = JSON.parse(localStorage.getItem("localData")) || {};
+      }
+    }
+
     // Check device authorization status
     async function checkDeviceStatus() {
       const response = await fetch(`${WEB_APP_URL}?method=getDeviceStatus&deviceId=${deviceId}`);
       const data = await response.json();
       if (data.approved === "Yes") {
         document.getElementById("auth-section").style.display = "none";
-        syncData();
+        // Wait for data to be preloaded before starting the scan
+        await preloadData();
         startScan();
       } else {
         document.getElementById("auth-section").style.display = "block";
@@ -150,29 +167,43 @@
       }
     }
 
-    // Sync database data after authorization
-    async function syncData() {
-      const response = await fetch(`${WEB_APP_URL}?method=getData`);
-      localData = await response.json();
-      localStorage.setItem("localData", JSON.stringify(localData));
-    }
-
     // Start QR code scanning
     function startScan() {
+      // Ensure result is hidden and reader is visible
       document.getElementById("result").style.display = "none";
       document.getElementById("reader").style.display = "block";
-      
+
+      // If scanner already exists, stop and restart it
       if (qrScanner) {
-        qrScanner.start();
+        qrScanner.stop().then(() => {
+          qrScanner.start(
+            { facingMode: "environment" },
+            { fps: 20, qrbox: { width: 200, height: 200 } }, // Increased FPS and smaller QR box for faster scanning
+            async (decodedText) => {
+              await qrScanner.stop();
+              document.getElementById("reader").style.display = "none";
+              await processScan(decodedText);
+            },
+            (error) => {
+              console.error("Scan error:", error);
+            }
+          ).catch((err) => {
+            console.error("Failed to restart scanner:", err);
+            alert("Failed to access camera. Please ensure camera permissions are granted.");
+          });
+        }).catch((err) => {
+          console.error("Failed to stop scanner:", err);
+        });
         return;
       }
 
+      // Initialize scanner if it doesn't exist
       qrScanner = new Html5Qrcode("reader");
       qrScanner.start(
         { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
+        { fps: 20, qrbox: { width: 200, height: 200 } }, // Optimized for speed
         async (decodedText) => {
-          qrScanner.stop();
+          await qrScanner.stop();
           document.getElementById("reader").style.display = "none";
           await processScan(decodedText);
         },
@@ -187,14 +218,15 @@
 
     // Process scanned QR code
     async function processScan(rollNumber) {
-      let data = localData;
-      if (!data) {
-        data = JSON.parse(localStorage.getItem("localData")) || {};
+      if (!localData) {
+        alert("Data not loaded yet. Please wait a moment and try again.");
+        startScan();
+        return;
       }
 
       let student = null;
-      for (let tab in data) {
-        const sheetData = data[tab];
+      for (let tab in localData) {
+        const sheetData = localData[tab];
         student = sheetData.find(row => row[0] === rollNumber);
         if (student) break;
       }
