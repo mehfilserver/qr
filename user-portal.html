@@ -100,6 +100,7 @@
   <div id="loading-message">
     <h2>Loading KARKUNAN data PLEASE WAIT!</h2>
   </div>
+  <button onclick="refreshData()" style="display: none;" id="refresh-data-btn">Refresh Data</button>
   <div id="reader" style="display: none;"></div>
   <div id="result">
     <img id="student-img" src="">
@@ -120,6 +121,11 @@
     let deviceId = localStorage.getItem("deviceId") || generateDeviceId();
     localStorage.setItem("deviceId", deviceId);
 
+    // Clear localData on page load to ensure fresh data is fetched
+    window.addEventListener("load", () => {
+      localStorage.removeItem("localData");
+    });
+
     function generateDeviceId() {
       return "device-" + Math.random().toString(36).substr(2, 9);
     }
@@ -138,12 +144,20 @@
       document.getElementById("loading-message").style.display = "none";
     }
 
+    // Manually refresh data
+    async function refreshData() {
+      localStorage.removeItem("localData"); // Clear cached data
+      await loadData(); // Fetch new data
+      alert("Data refreshed successfully!");
+    }
+
     // Check device authorization status
     async function checkDeviceStatus() {
       const response = await fetch(`${WEB_APP_URL}?method=getDeviceStatus&deviceId=${deviceId}`);
       const data = await response.json();
       if (data.approved === "Yes") {
         document.getElementById("auth-section").style.display = "none";
+        document.getElementById("refresh-data-btn").style.display = "block"; // Show refresh button
         if (!localData && !localStorage.getItem("localData")) {
           await loadData();
         } else {
@@ -184,7 +198,7 @@
         try {
           qrScanner.stop().then(() => {
             qrScanner.clear();
-            qrScanner = null; // Reset the scanner instance
+            qrScanner = null;
             startNewScanner();
           }).catch(err => {
             console.error("Error stopping scanner:", err);
