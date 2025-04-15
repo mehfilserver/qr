@@ -28,7 +28,7 @@
       font-size: 2.5em;
       margin: 20px 0;
     }
-    #reader, #result {
+    #reader, #result, #loading-message {
       width: 90%;
       max-width: 500px;
       margin: 20px auto;
@@ -37,7 +37,7 @@
       border: 5px dashed #fff;
       border-radius: 10px;
     }
-    #result {
+    #result, #loading-message {
       background: rgba(255, 255, 255, 0.1);
       padding: 20px;
       border-radius: 10px;
@@ -97,6 +97,9 @@
     <input type="text" id="device-name" placeholder="Enter Device Name">
     <button onclick="requestAccess()">Request Access</button>
   </div>
+  <div id="loading-message">
+    <h2>Loading KARKUNAN data PLEASE WAIT!</h2>
+  </div>
   <div id="reader" style="display: none;"></div>
   <div id="result">
     <img id="student-img" src="">
@@ -121,20 +124,18 @@
       return "device-" + Math.random().toString(36).substr(2, 9);
     }
 
-    // Preload data to ensure it's available before scanning
-    async function preloadData() {
+    // Load data from database and store it locally
+    async function loadData() {
+      document.getElementById("loading-message").style.display = "block";
       try {
-        const storedData = localStorage.getItem("localData");
-        if (storedData) {
-          localData = JSON.parse(storedData);
-        }
         const response = await fetch(`${WEB_APP_URL}?method=getData`);
         localData = await response.json();
         localStorage.setItem("localData", JSON.stringify(localData));
       } catch (error) {
-        console.error("Error preloading data:", error);
+        console.error("Error loading data:", error);
         localData = JSON.parse(localStorage.getItem("localData")) || {};
       }
+      document.getElementById("loading-message").style.display = "none";
     }
 
     // Check device authorization status
@@ -143,8 +144,13 @@
       const data = await response.json();
       if (data.approved === "Yes") {
         document.getElementById("auth-section").style.display = "none";
-        // Wait for data to be preloaded before starting the scan
-        await preloadData();
+        // Load data only if it hasn't been loaded yet
+        if (!localData && !localStorage.getItem("localData")) {
+          await loadData();
+        } else {
+          localData = JSON.parse(localStorage.getItem("localData"));
+          document.getElementById("loading-message").style.display = "none";
+        }
         startScan();
       } else {
         document.getElementById("auth-section").style.display = "block";
@@ -168,59 +174,43 @@
     }
 
     // Start QR code scanning
-    function startScan() {
-      // Ensure result is hidden and reader is visible
+    async function startScan() {
+      // Hide result and show reader
       document.getElementById("result").style.display = "none";
       document.getElementById("reader").style.display = "block";
 
-      // If scanner already exists, stop and restart it
+      // Clear any previous scanner instance
       if (qrScanner) {
-        qrScanner.stop().then(() => {
-          qrScanner.start(
-            { facingMode: "environment" },
-            { fps: 20, qrbox: { width: 200, height: 200 } }, // Increased FPS and smaller QR box for faster scanning
-            async (decodedText) => {
-              await qrScanner.stop();
-              document.getElementById("reader").style.display = "none";
-              await processScan(decodedText);
-            },
-            (error) => {
-              console.error("Scan error:", error);
-            }
-          ).catch((err) => {
-            console.error("Failed to restart scanner:", err);
-            alert("Failed to access camera. Please ensure camera permissions are granted.");
-          });
-        }).catch((err) => {
-          console.error("Failed to stop scanner:", err);
-        });
-        return;
+        await qrScanner.stop().catch(err => console.error("Error stopping scanner:", err));
+        await qrScanner.clear().catch(err => console.error("Error clearing scanner:", err));
       }
 
-      // Initialize scanner if it doesn't exist
+      // Initialize new scanner instance
       qrScanner = new Html5Qrcode("reader");
-      qrScanner.start(
-        { facingMode: "environment" },
-        { fps: 20, qrbox: { width: 200, height: 200 } }, // Optimized for speed
-        async (decodedText) => {
-          await qrScanner.stop();
-          document.getElementById("reader").style.display = "none";
-          await processScan(decodedText);
-        },
-        (error) => {
-          console.error("Scan error:", error);
-        }
-      ).catch((err) => {
+      try {
+        await qrScanner.start(
+          { facingMode: "environment" },
+          { fps: 20, qrbox: { width: 200, height: 200 } },
+          async (decodedText) => {
+            await qrScanner.stop();
+            document.getElementById("reader").style.display = "none";
+            await processScan(decodedText);
+          },
+          (error) => {
+            console.error("Scan error:", error);
+          }
+        );
+      } catch (err) {
         console.error("Failed to start scanner:", err);
         alert("Failed to access camera. Please ensure camera permissions are granted.");
-      });
+        document.getElementById("reader").style.display = "none";
+      }
     }
 
     // Process scanned QR code
     async function processScan(rollNumber) {
       if (!localData) {
-        alert("Data not loaded yet. Please wait a moment and try again.");
-        startScan();
+        alert("Data not loaded. Please reload the page.");
         return;
       }
 
