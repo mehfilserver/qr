@@ -144,11 +144,29 @@
       document.getElementById("loading-message").style.display = "none";
     }
 
-    // Manually refresh data
+    // Manually refresh data and restart scanner
     async function refreshData() {
+      // Stop and clear the scanner if it's active
+      if (qrScanner) {
+        try {
+          await qrScanner.stop();
+          qrScanner.clear();
+          qrScanner = null;
+          document.getElementById("reader").style.display = "none";
+        } catch (err) {
+          console.error("Error stopping scanner during refresh:", err);
+          qrScanner = null;
+          document.getElementById("reader").style.display = "none";
+        }
+      }
+
+      // Refresh the data
       localStorage.removeItem("localData"); // Clear cached data
       await loadData(); // Fetch new data
+
+      // Restart the scanner after refresh
       alert("Data refreshed successfully!");
+      startScan(); // Automatically restart the scanner
     }
 
     // Check device authorization status
@@ -157,7 +175,7 @@
       const data = await response.json();
       if (data.approved === "Yes") {
         document.getElementById("auth-section").style.display = "none";
-        document.getElementById("refresh-data-btn").style.display = "block"; // Show refresh button
+        document.getElementById("refresh-data-btn").style.display = "block";
         if (!localData && !localStorage.getItem("localData")) {
           await loadData();
         } else {
