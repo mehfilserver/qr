@@ -179,46 +179,65 @@
       const readerDiv = document.getElementById("reader");
       readerDiv.style.display = "block";
 
-      // Clear any previous scanner instance
+      // Ensure previous scanner is fully stopped and cleared
       if (qrScanner) {
-        qrScanner.stop().then(() => {
-          qrScanner.clear();
-          initializeScanner();
-        }).catch(err => {
-          console.error("Error stopping scanner:", err);
-          qrScanner.clear();
-          initializeScanner();
-        });
+        try {
+          qrScanner.stop().then(() => {
+            qrScanner.clear();
+            qrScanner = null; // Reset the scanner instance
+            startNewScanner();
+          }).catch(err => {
+            console.error("Error stopping scanner:", err);
+            qrScanner.clear();
+            qrScanner = null;
+            startNewScanner();
+          });
+        } catch (err) {
+          console.error("Error in stop process:", err);
+          qrScanner = null;
+          startNewScanner();
+        }
       } else {
-        initializeScanner();
+        startNewScanner();
       }
     }
 
-    // Initialize the QR scanner
-    function initializeScanner() {
+    // Initialize a new QR scanner instance
+    function startNewScanner() {
       const readerDiv = document.getElementById("reader");
-      // Clear the reader div to ensure no stale content
-      readerDiv.innerHTML = "";
+      readerDiv.innerHTML = ""; // Clear any previous scanner content
 
-      qrScanner = new Html5Qrcode("reader");
-      qrScanner.start(
-        { facingMode: "environment" },
-        { fps: 20, qrbox: { width: 200, height: 200 } },
-        (decodedText) => {
-          qrScanner.stop().then(() => {
-            qrScanner.clear();
-            document.getElementById("reader").style.display = "none";
-            processScan(decodedText);
-          }).catch(err => console.error("Error stopping scanner after scan:", err));
-        },
-        (error) => {
-          console.error("Scan error:", error);
-        }
-      ).catch(err => {
-        console.error("Failed to start scanner:", err);
-        alert("Failed to access camera. Please ensure camera permissions are granted.");
+      try {
+        qrScanner = new Html5Qrcode("reader", { verbose: false });
+        qrScanner.start(
+          { facingMode: "environment" },
+          { fps: 20, qrbox: { width: 200, height: 200 } },
+          (decodedText) => {
+            qrScanner.stop().then(() => {
+              qrScanner.clear();
+              qrScanner = null;
+              document.getElementById("reader").style.display = "none";
+              processScan(decodedText);
+            }).catch(err => {
+              console.error("Error stopping scanner after scan:", err);
+              qrScanner = null;
+              document.getElementById("reader").style.display = "none";
+              processScan(decodedText);
+            });
+          },
+          (error) => {
+            console.error("Scan error:", error);
+          }
+        ).catch(err => {
+          console.error("Failed to start scanner:", err);
+          alert("Failed to access camera. Please ensure camera permissions are granted and try again.");
+          document.getElementById("reader").style.display = "none";
+        });
+      } catch (err) {
+        console.error("Error initializing scanner:", err);
+        alert("Error initializing scanner. Please refresh the page and try again.");
         document.getElementById("reader").style.display = "none";
-      });
+      }
     }
 
     // Process scanned QR code
