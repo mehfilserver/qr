@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>e-Media SIALKOT - Admin Portal</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(45deg, #1dd1a1, #54a0ff, #ff9f43, #ff6b6b);
+      background-size: 400%;
+      animation: gradient 15s ease infinite;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      color: #fff;
+      text-align: center;
+    }
+    @keyframes gradient {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    h1 {
+      font-size: 2.5em;
+      margin: 20px 0;
+    }
+    #auth-section, #admin-content {
+      width: 90%;
+      max-width: 600px;
+      margin: 20px auto;
+    }
+    #pending-requests, #scanned-cards {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 20px;
+      border-radius: 10px;
+      margin: 20px 0;
+    }
+    .request, .scanned-card {
+      background: rgba(0, 0, 0, 0.2);
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 5px;
+    }
+    button {
+      background-color: #007bff;
+      color: #fff;
+      border: none;
+      padding: 10px 20px;
+      margin: 5px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 1em;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    button.deny {
+      background-color: #ff0000;
+    }
+    button.deny:hover {
+      background-color: #cc0000;
+    }
+    input {
+      padding: 10px;
+      margin: 10px;
+      border-radius: 5px;
+      border: none;
+      font-size: 1em;
+    }
+  </style>
+</head>
+<body>
+  <h1>e-Media SIALKOT - Admin Portal</h1>
+  <div id="auth-section">
+    <input type="password" id="passcode" placeholder="Enter Passcode">
+    <button onclick="checkPasscode()">Login</button>
+  </div>
+  <div id="admin-content" style="display: none;">
+    <button onclick="fetchPendingRequests()">Refresh Requests</button>
+    <div id="pending-requests">
+      <h2>Pending Requests</h2>
+      <div id="requests-list"></div>
+    </div>
+    <div id="scanned-cards">
+      <h2>Scanned Cards History</h2>
+      <div id="scanned-cards-list"></div>
+    </div>
+  </div>
+
+  <script>
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzs-X4sU9JmCw3BieXV4NgP4mLtLqNDYx9x1AxFtuThDl3hMGGTHVxDeAmXdpiuiM1Jwg/exec"; // Replace with your Google Apps Script web app URL
+    const PASSCODE = "0381";
+
+    function checkPasscode() {
+      const passcode = document.getElementById("passcode").value;
+      if (passcode === PASSCODE) {
+        document.getElementById("auth-section").style.display = "none";
+        document.getElementById("admin-content").style.display = "block";
+        fetchPendingRequests();
+        fetchScannedCards();
+      } else {
+        alert("Incorrect passcode.");
+      }
+    }
+
+    async function fetchPendingRequests() {
+      const response = await fetch(`${WEB_APP_URL}?method=getPendingRequests`);
+      const requests = await response.json();
+      const list = document.getElementById("requests-list");
+      list.innerHTML = "";
+      requests.forEach(req => {
+        const div = document.createElement("div");
+        div.className = "request";
+        div.innerHTML = `
+          <p>Device ID: ${req.deviceId}</p>
+          <p>Device Name: ${req.deviceName}</p>
+          <button onclick="approveDevice('${req.deviceId}')">Approve</button>
+          <button class="deny" onclick="denyDevice('${req.deviceId}')">Deny</button>
+        `;
+        list.appendChild(div);
+      });
+    }
+
+    async function approveDevice(deviceId) {
+      const apiKey = Math.random().toString(36).substr(2, 9);
+      await fetch(`${WEB_APP_URL}?method=approveDevice&deviceId=${deviceId}&apiKey=${apiKey}`);
+      fetchPendingRequests();
+    }
+
+    async function denyDevice(deviceId) {
+      await fetch(`${WEB_APP_URL}?method=denyDevice&deviceId=${deviceId}`);
+      fetchPendingRequests();
+    }
+
+    async function fetchScannedCards() {
+      const response = await fetch(`${WEB_APP_URL}?method=getScannedCards`);
+      const cards = await response.json();
+      const list = document.getElementById("scanned-cards-list");
+      list.innerHTML = "";
+      cards.forEach(card => {
+        const div = document.createElement("div");
+        div.className = "scanned-card";
+        div.innerHTML = `
+          <p>Device: ${card[0]}</p>
+          <p>Roll Number: ${card[1]}</p>
+          <p>Eligibility: ${card[2]}</p>
+          <p>Timestamp: ${card[3]}</p>
+        `;
+        list.appendChild(div);
+      });
+    }
+  </script>
+</body>
+</html>
